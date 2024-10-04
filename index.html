@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SRTN Scheduling with Quantum</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+      }
+      table,
+      th,
+      td {
+        border: 1px solid black;
+      }
+      th,
+      td {
+        padding: 8px;
+        text-align: center;
+      }
+      input {
+        width: 80px;
+      }
+      canvas {
+        margin-top: 20px;
+      }
+      #summary {
+        margin-top: 20px;
+        font-size: 1.1em;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>SRTN Scheduling with Quantum</h1>
+
+    <label for="cpuCount">Number of CPUs: </label>
+    <input type="number" id="cpuCount" value="2" min="1" />
+    <br /><br />
+
+    <label for="quantum">Quantum Time: </label>
+    <input type="number" id="quantum" value="1" min="1" />
+    <br /><br />
+
+    <button onclick="addJob()">Add Jobs</button>
+    <button onclick="removeLastJob()">Remove Last Job</button>
+    <button onclick="calculateSRTN()">Calculate SRTN</button>
+    <br /><br />
+
+    <table>
+      <thead>
+        <tr>
+          <th>#Jobs</th>
+          <th>Arrival Time</th>
+          <th>Burst Time</th>
+          <th>Start Time</th>
+          <th>End Time</th>
+          <th>Turnaround Time</th>
+        </tr>
+      </thead>
+      <tbody id="jobTable">
+        <!-- Job rows will be dynamically added here -->
+      </tbody>
+    </table>
+
+    <h3>Total Turnaround Time: <span id="totalTurnaround">0</span></h3>
+
+    <canvas id="ganttChart" width="800" height="400"></canvas>
+
+    <div id="summary">
+      <h3>Final Summary of Start Times</h3>
+      <ul id="startTimesList">
+        <!-- Summary of start and end times will be added here -->
+      </ul>
+    </div>
+
+    <script>
+      let jobCounter = 0;
+      let jobs = [];
+
+      // Function to add a job row
+      function addJob() {
+        jobCounter++;
+        const table = document.getElementById("jobTable");
+        const row = document.createElement("tr");
+        row.id = `jobRow${jobCounter}`;
+        row.innerHTML = `
+                <td>Job ${jobCounter}</td>
+                <td><input type="number" id="arrivalTime${jobCounter}" min="0" placeholder="Arrival time"></td>
+                <td><input type="number" id="burstTime${jobCounter}" min="1" placeholder="Burst time"></td>
+                <td id="startTime${jobCounter}">-</td>
+                <td id="endTime${jobCounter}">-</td>
+                <td id="turnaroundTime${jobCounter}">-</td>
+            `;
+        table.appendChild(row);
+      }
+
+      // Function to remove the last job row
+      function removeLastJob() {
+        if (jobCounter > 0) {
+          const row = document.getElementById(`jobRow${jobCounter}`);
+          row.remove();
+          jobCounter--;
+        }
+      }
+
+      // Function to calculate SRTN with quantum
+      function calculateSRTN() {
+        jobs = [];
+        for (let i = 1; i <= jobCounter; i++) {
+          const arrivalTime = parseInt(
+            document.getElementById(`arrivalTime${i}`).value
+          );
+          const burstTime = parseInt(
+            document.getElementById(`burstTime${i}`).value
+          );
+          jobs.push({
+            job: i,
+            arrivalTime,
+            burstTime,
+            remainingTime: burstTime,
+            startTime: null,
+            endTime: null,
+          });
+        }
+        const numCPUs = parseInt(document.getElementById("cpuCount").value);
+        const quantum = parseInt(document.getElementById("quantum").value);
+        performSRTN(jobs, numCPUs, quantum);
+      }
+
+      // Shortest Remaining Time Next (SRTN) Algorithm with Quantum
+      function performSRTN(jobs, numCPUs, quantum) {
+        let currentTime = 0;
+        let totalTurnaround = 0;
+        let completedJobs = 0;
+        const schedule = [];
+        CPU_List = [];
+        for (let i = 0; i < len(numCPUs); i++) {
+          CPU_List.push({
+            cpuID: i + 1,
+            isRunning: false,
+            jobId: 0,
+            switchTime: 0,
+          });
+        }
+
+        jobsOriginalList = jobs;
+        const sortJobs = (jobs) => {
+            jobs.sort((a, b) => {
+                if (a.arrivalTime !== b.arrivalTime) {
+                    return a.arrivalTime - b.arrivalTime;
+                }
+                return a.burstTime - b.burstTime;
+        });
+        return jobs
+        }
+        jobs = sortJobs(jobs)
+        let i = 0;
+        let j = 0;
+        let prevJobStartTime = jobs[0].startTime;
+        currentJob = jobs[0];
+        let currentCPU;
+        while (completedJobs < jobs.length) {
+          // Select jobs with the shortest remaining time
+          if (i == len(CPU_List)) {
+            i = 0;
+            currentTime = currentTime + quantum;
+            jobs = sortJobs(jobs)[0];
+          }
+          currentJob = jobs[j]
+          currentCPU = CPU_List[i];
+          if ((currentCPU.endTime <= currentTime) && (currentJob.arrivalTime <= currentTime) && (currentJob.endTime != null)) {
+            lowerTime = min(quantum, currentJob.remainingTime);
+            currentCPU.isRunning = true;
+            currentCPU.jobId = currentJob.job;
+            if (job.startTime == null) {
+              job.startTime = currentCPU.switchTime;
+            }
+            job.remainingTime = job.remainingTime - lowerTime;
+            currentCPU.switchTime = currentCPU.switchTime + lowerTime;
+          }
+          if (job.remainingTime == 0) {
+            job.endTime = currentCPU.switchTime;
+            completedJobs = completedJobs + 1;
+          }
+          i = i+1;
+          j = j+1;
+        }
+
+          const availableJobs = jobs.filter(
+            (job) => job.arrivalTime <= currentTime && job.remainingTime > 0
+          );
+          availableJobs.sort((a, b) => a.remainingTime - b.remainingTime);
+          console.log("availableJobs", availableJobs);
+          // Execute jobs on available CPUs
+          const cpus = Array.from({ length: numCPUs }, () => null);
+          for (let i = 0; i < Math.min(numCPUs, availableJobs.length); i++) {
+            const currentJob = availableJobs[i];
+
+            if (currentJob.startTime === null) {
+              currentJob.startTime = currentTime;
+            }
+
+            // Execute job for a quantum or remaining time, whichever is smaller
+            const executionTime = Math.min(quantum, currentJob.remainingTime);
+            schedule.push({
+              job: currentJob.job,
+              startTime: currentTime,
+              duration: executionTime,
+              cpu: i + 1,
+            });
+
+            currentJob.remainingTime -= executionTime;
+            currentTime += executionTime;
+
+            if (currentJob.remainingTime === 0) {
+              currentJob.endTime = currentTime;
+              const turnaroundTime =
+                currentJob.endTime - currentJob.arrivalTime;
+              totalTurnaround += turnaroundTime;
+              completedJobs++;
+              document.getElementById(`endTime${currentJob.job}`).textContent =
+                currentJob.endTime;
+              document.getElementById(
+                `turnaroundTime${currentJob.job}`
+              ).textContent = turnaroundTime;
+
+              // Update the summary of start times
+            }
+            document.getElementById(`startTime${currentJob.job}`).textContent =
+              currentJob.startTime;
+            updateSummary(
+              currentJob.job,
+              currentJob.startTime,
+              currentJob.endTime
+            );
+            console.log("currentJob", currentJob);
+          }
+        }
+
+        document.getElementById("totalTurnaround").textContent = (
+          totalTurnaround / jobs.length
+        ).toFixed(2);
+        drawGanttChart(schedule, numCPUs);
+      }
+
+      // Function to update the summary of start and end times
+      function updateSummary(job, startTime, endTime) {
+        const summaryList = document.getElementById("startTimesList");
+        const listItem = document.createElement("li");
+        listItem.textContent = `Job ${job}: Starts at time ${startTime}, finishes at time ${endTime}.`;
+        summaryList.appendChild(listItem);
+      }
+
+      // Function to draw Gantt Chart using Chart.js
+      function drawGanttChart(schedule, numCPUs) {
+        const ctx = document.getElementById("ganttChart").getContext("2d");
+        const datasets = [];
+
+        const colors = ["#FFA07A", "#FFD700", "#ADFF2F", "#87CEFA", "#FF69B4"];
+        const jobNames = [];
+
+        // Prepare datasets for each CPU
+        for (let i = 1; i <= numCPUs; i++) {
+          datasets.push({
+            label: `CPU-${i}`,
+            data: [],
+            backgroundColor: colors[(i - 1) % colors.length],
+          });
+        }
+
+        // Fill datasets with job data
+        schedule.forEach((s) => {
+          datasets[s.cpu - 1].data.push({
+            x: [s.startTime, s.startTime + s.duration],
+            y: [`CPU-${s.cpu}`],
+            job: `Job ${s.job}`,
+          });
+        });
+
+        // Create a new chart
+        new Chart(ctx, {
+          type: "bar",
+          data: {
+            datasets: datasets,
+          },
+          options: {
+            responsive: true,
+            scales: {
+              x: {
+                type: "linear",
+                position: "bottom",
+                title: {
+                  display: true,
+                  text: "Time",
+                },
+                stacked: true,
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: "CPUs",
+                },
+                stacked: true,
+              },
+            },
+            plugins: {
+              tooltip: {
+                callbacks: {
+                  title: (tooltipItems) => {
+                    const item = tooltipItems[0];
+                    return item.dataset.label + ": " + item.raw.job;
+                  },
+                },
+              },
+            },
+          },
+        });
+      }
+    </script>
+  </body>
+</html>
