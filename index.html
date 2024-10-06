@@ -111,7 +111,7 @@
 
       // Function to calculate SRTN with quantum
       function calculateSRTN() {
-        jobs = [];
+        let jobs = [];
         for (let i = 1; i <= jobCounter; i++) {
           const arrivalTime = parseInt(
             document.getElementById(`arrivalTime${i}`).value
@@ -126,10 +126,14 @@
             remainingTime: burstTime,
             startTime: null,
             endTime: null,
+            currentCpuRunTime: arrivalTime,
+            cpuIds: [],
           });
         }
         const numCPUs = parseInt(document.getElementById("cpuCount").value);
         const quantum = parseInt(document.getElementById("quantum").value);
+        console.log("jobs at cal", jobs);
+
         performSRTN(jobs, numCPUs, quantum);
       }
 
@@ -137,10 +141,10 @@
       function performSRTN(jobs, numCPUs, quantum) {
         let currentTime = 0;
         let totalTurnaround = 0;
-        let completedJobs = 0;
+        let completedJobs = [];
         const schedule = [];
-        CPU_List = [];
-        for (let i = 0; i < len(numCPUs); i++) {
+        let CPU_List = [];
+        for (let i = 0; i < numCPUs; i++) {
           CPU_List.push({
             cpuID: i + 1,
             isRunning: false,
@@ -149,100 +153,118 @@
           });
         }
 
-        jobsOriginalList = jobs;
-        const sortJobs = (jobs) => {
-            jobs.sort((a, b) => {
-                if (a.arrivalTime !== b.arrivalTime) {
-                    return a.arrivalTime - b.arrivalTime;
-                }
-                return a.burstTime - b.burstTime;
-        });
-        return jobs
-        }
-        jobs = sortJobs(jobs)
+        let jobsOriginalList = jobs;
+        const sortJobs = (jobs, currentTime) => {
+          const availableJobs = jobs.filter(
+            (job) => job.arrivalTime <= currentTime
+          );
+          availableJobs.sort((a, b) => {
+            if (a.remainingTime !== b.remainingTime) {
+              return a.remainingTime - b.remainingTime;
+            }
+            return a.arrivalTime - b.arrivalTime;
+          });
+
+          return availableJobs;
+        };
+        const removeJob = (jobs, currentJob) => {
+          return jobs.filter((job) => job.job !== currentJob.job);
+        };
         let i = 0;
         let j = 0;
-        let prevJobStartTime = jobs[0].startTime;
-        currentJob = jobs[0];
+        let currentJob;
         let currentCPU;
-        while (completedJobs < jobs.length) {
-          // Select jobs with the shortest remaining time
-          if (i == len(CPU_List)) {
+        let currentCPUJobs = [];
+        let newJobs = sortJobs(jobs, 0);
+        console.log("newJobs", newJobs);
+
+        while (completedJobs.length < jobsOriginalList.length) {
+          console.log("i", i);
+          console.log("j", j);
+
+          if (i == CPU_List.length || j == newJobs.length) {
             i = 0;
-            currentTime = currentTime + quantum;
-            jobs = sortJobs(jobs)[0];
+            currentTime = currentTime + 1;
+            j = 0;
+            console.log("jobs at starting if condition", jobs);
+            newJobs = sortJobs(jobs, currentTime);
+            console.log("currentTime", currentTime);
           }
-          currentJob = jobs[j]
-          currentCPU = CPU_List[i];
-          if ((currentCPU.endTime <= currentTime) && (currentJob.arrivalTime <= currentTime) && (currentJob.endTime != null)) {
-            lowerTime = min(quantum, currentJob.remainingTime);
+
+          while (newJobs.length == 0) {
+            currentTime = currentTime + 1;
+            newJobs = sortJobs(jobs, currentTime);
+            console.log("currentTime", currentTime);
+          }
+          console.log("the jobs list", newJobs);
+          let currentJob = newJobs[j];
+          let currentCPU = CPU_List[i];
+          console.log("currentJob", currentJob);
+          console.log("currentCPU", currentCPU);
+          if (
+            currentJob &&
+            currentJob.arrivalTime <= currentTime &&
+            currentJob.endTime == null &&
+            currentJob.currentCpuRunTime <= currentTime &&
+            currentCPU.switchTime <= currentTime
+          ) {
+            currentJob.cpuIds.push(currentCPU.cpuID);
+            console.log("the current time inside while", currentTime);
+            console.log("current running job in cpu", currentJob);
+            lowerTime = Math.min(quantum, currentJob.remainingTime);
             currentCPU.isRunning = true;
             currentCPU.jobId = currentJob.job;
-            if (job.startTime == null) {
-              job.startTime = currentCPU.switchTime;
-            }
-            job.remainingTime = job.remainingTime - lowerTime;
-            currentCPU.switchTime = currentCPU.switchTime + lowerTime;
-          }
-          if (job.remainingTime == 0) {
-            job.endTime = currentCPU.switchTime;
-            completedJobs = completedJobs + 1;
-          }
-          i = i+1;
-          j = j+1;
-        }
-
-          const availableJobs = jobs.filter(
-            (job) => job.arrivalTime <= currentTime && job.remainingTime > 0
-          );
-          availableJobs.sort((a, b) => a.remainingTime - b.remainingTime);
-          console.log("availableJobs", availableJobs);
-          // Execute jobs on available CPUs
-          const cpus = Array.from({ length: numCPUs }, () => null);
-          for (let i = 0; i < Math.min(numCPUs, availableJobs.length); i++) {
-            const currentJob = availableJobs[i];
-
-            if (currentJob.startTime === null) {
+            if (currentJob.startTime == null) {
               currentJob.startTime = currentTime;
             }
-
-            // Execute job for a quantum or remaining time, whichever is smaller
-            const executionTime = Math.min(quantum, currentJob.remainingTime);
+            currentJob.remainingTime = currentJob.remainingTime - lowerTime;
+            currentCPU.switchTime = currentTime + lowerTime;
+            currentJob.currentCpuRunTime = currentTime + lowerTime;
             schedule.push({
               job: currentJob.job,
               startTime: currentTime,
-              duration: executionTime,
+              duration: currentJob.currentCpuRunTime,
               cpu: i + 1,
             });
-
-            currentJob.remainingTime -= executionTime;
-            currentTime += executionTime;
-
-            if (currentJob.remainingTime === 0) {
-              currentJob.endTime = currentTime;
-              const turnaroundTime =
-                currentJob.endTime - currentJob.arrivalTime;
-              totalTurnaround += turnaroundTime;
-              completedJobs++;
-              document.getElementById(`endTime${currentJob.job}`).textContent =
-                currentJob.endTime;
-              document.getElementById(
-                `turnaroundTime${currentJob.job}`
-              ).textContent = turnaroundTime;
-
-              // Update the summary of start times
-            }
-            document.getElementById(`startTime${currentJob.job}`).textContent =
-              currentJob.startTime;
-            updateSummary(
-              currentJob.job,
-              currentJob.startTime,
-              currentJob.endTime
-            );
-            console.log("currentJob", currentJob);
           }
+          if (
+            currentJob &&
+            currentJob.remainingTime == 0 &&
+            !completedJobs.includes(currentJob)
+          ) {
+            currentJob.endTime = currentJob.currentCpuRunTime;
+            completedJobs.push(currentJob);
+            console.log("jobs before deletion", jobs);
+            jobs = removeJob(jobs, currentJob);
+            console.log("job to be deleted", currentJob);
+            console.log("jobs after deletion", jobs);
+            const turnaroundTime = currentJob.endTime - currentJob.arrivalTime;
+            totalTurnaround += turnaroundTime;
+            document.getElementById(`endTime${currentJob.job}`).textContent =
+              currentJob.endTime;
+            document.getElementById(
+              `turnaroundTime${currentJob.job}`
+            ).textContent = turnaroundTime;
+            // jobs.splice(j, 1); need to find the index of job j in jobs.
+          }
+          if (currentJob && currentJob.currentCpuRunTime > currentTime) {
+            j = j + 1;
+          }
+          if (
+            (currentCPU && currentCPU.switchTime > currentTime) ||
+            j == newJobs.length
+          ) {
+            i = i + 1;
+          }
+          document.getElementById(`startTime${currentJob.job}`).textContent =
+            currentJob.startTime;
+          updateSummary(
+            currentJob.job,
+            currentJob.startTime,
+            currentJob.currentCpuRunTime
+          );
         }
-
+        console.log("completedJobs", completedJobs);
         document.getElementById("totalTurnaround").textContent = (
           totalTurnaround / jobs.length
         ).toFixed(2);
