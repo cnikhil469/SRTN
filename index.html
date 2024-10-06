@@ -266,7 +266,7 @@
         }
         console.log("completedJobs", completedJobs);
         document.getElementById("totalTurnaround").textContent = (
-          totalTurnaround / jobs.length
+          totalTurnaround / jobsOriginalList.length
         ).toFixed(2);
         drawGanttChart(schedule, numCPUs);
       }
