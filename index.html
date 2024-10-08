@@ -279,40 +279,85 @@
         summaryList.appendChild(listItem);
       }
 
-      // Function to draw Gantt Chart using Chart.js
+      let ganttChart; // Variable to hold the current chart instance
+
       function drawGanttChart(schedule, numCPUs) {
         const ctx = document.getElementById("ganttChart").getContext("2d");
+
+        if (!ctx) {
+          console.error("Failed to get the 2D context of the canvas");
+          return;
+        }
+
+        // Destroy the existing chart if it exists
+        if (ganttChart) {
+          ganttChart.destroy();
+        }
+
+        // Define colors for jobs (you can expand this array as needed)
+        const colors = [
+          "#FF5733",
+          "#33FF57",
+          "#3357FF",
+          "#F333FF",
+          "#FF8C33",
+          "#33FFF0",
+          "#8C33FF",
+        ];
+
         const datasets = [];
 
-        const colors = ["#FFA07A", "#FFD700", "#ADFF2F", "#87CEFA", "#FF69B4"];
-        const jobNames = [];
+        // Map each job to a unique color
+        const jobColorMap = {};
+        schedule.forEach((s) => {
+          if (!jobColorMap[s.job]) {
+            jobColorMap[s.job] = colors[s.job % colors.length];
+          }
+        });
 
         // Prepare datasets for each CPU
         for (let i = 1; i <= numCPUs; i++) {
           datasets.push({
             label: `CPU-${i}`,
             data: [],
-            backgroundColor: colors[(i - 1) % colors.length],
+            backgroundColor: [],
+            borderColor: "black",
+            borderWidth: 1,
           });
         }
 
-        // Fill datasets with job data
+        // Fill datasets with job data based on the provided schedule
         schedule.forEach((s) => {
+          const jobDuration = s.duration;
+          const color = jobColorMap[s.job];
           datasets[s.cpu - 1].data.push({
-            x: [s.startTime, s.startTime + s.duration],
-            y: [`CPU-${s.cpu}`],
-            job: `Job ${s.job}`,
+            x: s.startTime, // Start time for job
+            xEnd: s.startTime + jobDuration, // End time for job
+            y: `CPU-${s.cpu}`, // CPU label
+            job: `Job ${s.job}`, // Job label
+            backgroundColor: color, // Color for the job
           });
         });
 
-        // Create a new chart
-        new Chart(ctx, {
+        // Create the Gantt chart
+        ganttChart = new Chart(ctx, {
           type: "bar",
           data: {
-            datasets: datasets,
+            datasets: datasets.map((dataset) => ({
+              ...dataset,
+              // For each dataset, map its data to match Chart.js 'x' and 'y' axis
+              data: dataset.data.map((d) => ({
+                x: d.x, // Start time
+                x2: d.xEnd, // End time (custom property we'll handle)
+                y: d.y, // CPU
+                job: d.job, // Job label
+                backgroundColor: d.backgroundColor, // Correct background color
+              })),
+            })),
           },
           options: {
             responsive: true,
+            indexAxis: "y", // Horizontal bars
             scales: {
               x: {
                 type: "linear",
@@ -321,27 +366,59 @@
                   display: true,
                   text: "Time",
                 },
-                stacked: true,
+                stacked: false, // Keep individual jobs separately
               },
               y: {
+                type: "category",
+                labels: Array.from(
+                  { length: numCPUs },
+                  (_, i) => `CPU-${i + 1}`
+                ),
                 title: {
                   display: true,
                   text: "CPUs",
                 },
-                stacked: true,
+                stacked: false, // No stacking of bars
               },
             },
             plugins: {
               tooltip: {
-                callbacks: {
-                  title: (tooltipItems) => {
-                    const item = tooltipItems[0];
-                    return item.dataset.label + ": " + item.raw.job;
-                  },
-                },
+                enabled: false, // Disable tooltips (can be enabled if needed)
               },
             },
           },
+          plugins: [
+            {
+              id: "jobLabelPlugin",
+              afterDatasetsDraw: function (chart) {
+                const ctx = chart.ctx;
+                chart.data.datasets.forEach(function (dataset, index) {
+                  const meta = chart.getDatasetMeta(index);
+                  meta.data.forEach(function (bar, idx) {
+                    const job = dataset.data[idx].job;
+                    const startTime = dataset.data[idx].x;
+                    const duration = dataset.data[idx].x2 - startTime;
+                    const jobLabel = `${job} (${startTime} - ${
+                      startTime + duration
+                    })`;
+
+                    // Draw job label inside the bar
+                    ctx.fillStyle = "black";
+                    ctx.font = "12px Arial";
+                    ctx.textAlign = "center";
+                    const barWidth = bar.width;
+                    const barHeight = bar.height;
+
+                    ctx.fillText(
+                      jobLabel,
+                      bar.x + barWidth / 2,
+                      bar.y + barHeight / 2 + 4
+                    );
+                  });
+                });
+              },
+            },
+          ],
         });
       }
     </script>
