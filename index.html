@@ -308,84 +308,63 @@
         listItem.textContent = `Job ${job}: Starts at time ${startTime}, finishes at time ${endTime}.`;
         summaryList.appendChild(listItem);
       }
+
       function drawGanttChart(schedule, numCPUs) {
-        const ctx = document.getElementById("ganttChart").getContext("2d");
+        const canvas = document.getElementById("ganttChart");
+        const ctx = canvas.getContext("2d");
 
-        // Prepare datasets for the Gantt Chart
-        const datasets = [];
-        const colors = [
-          "rgba(75, 192, 192, 0.6)",
-          "rgba(255, 99, 132, 0.6)",
-          "rgba(255, 159, 64, 0.6)",
-          "rgba(54, 162, 235, 0.6)",
-          "rgba(153, 102, 255, 0.6)",
-          "rgba(255, 206, 86, 0.6)",
-        ];
+        // Clear the canvas before drawing
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Group data based on CPU
-        for (let cpu = 1; cpu <= numCPUs; cpu++) {
-          const cpuJobs = schedule.filter((entry) => entry.cpu === cpu);
-          const backgroundColor = colors[(cpu - 1) % colors.length];
+        const colors = ["#f4a582", "#fdcc8a", "#d73027", "#4575b4"]; // Colors for jobs
+        const cpuHeight = 50; // Height for each CPU row
+        const jobHeight = 30; // Height of job bars
+        const padding = 5; // Padding between jobs and edges
+        const timeUnitWidth = 50; // Width of each time unit on the Gantt chart
 
-          cpuJobs.forEach((job) => {
-            datasets.push({
-              label: `Job ${job.job} (CPU ${job.cpu})`,
-              backgroundColor,
-              data: [
-                {
-                  x: job.startTime,
-                  x2: job.duration,
-                  y: `CPU ${job.cpu}`,
-                },
-              ],
-            });
-          });
+        // Draw CPU labels on the left side
+        for (let i = 0; i < numCPUs; i++) {
+          const y = i * cpuHeight + padding;
+          ctx.fillStyle = "#000";
+          ctx.font = "14px Arial";
+          ctx.fillText(`CPU-${i + 1}`, 10, y + jobHeight / 2 + 5);
         }
 
-        // Destroy previous chart instance if exists
-        if (Chart.getChart("ganttChart")) {
-          Chart.getChart("ganttChart").destroy();
-        }
+        // Draw the job bars
+        schedule.forEach((job, index) => {
+          const cpuIndex = job.cpu - 1; // CPU index (0-based)
+          const startX = job.startTime * timeUnitWidth;
+          const width = (job.duration - job.startTime) * timeUnitWidth;
+          const y = cpuIndex * cpuHeight + padding;
 
-        // Create Gantt Chart as a horizontal bar chart
-        new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: Array.from({ length: numCPUs }, (_, i) => `CPU ${i + 1}`),
-            datasets: datasets,
-          },
-          options: {
-            indexAxis: "y",
-            scales: {
-              x: {
-                type: "linear",
-                position: "bottom",
-                title: {
-                  display: true,
-                  text: "Time",
-                },
-              },
-              y: {
-                type: "category",
-                title: {
-                  display: true,
-                  text: "CPU",
-                },
-              },
-            },
-            plugins: {
-              tooltip: {
-                callbacks: {
-                  label: function (context) {
-                    const start = context.raw.x;
-                    const end = context.raw.x2;
-                    return `Job ${context.dataset.label}: Start ${start}, End ${end}`;
-                  },
-                },
-              },
-            },
-          },
+          // Choose a color for the job
+          const color = colors[index % colors.length];
+
+          // Draw the job as a rectangle
+          ctx.fillStyle = color;
+          ctx.fillRect(startX, y, width, jobHeight);
+
+          // Draw the job label inside the bar
+          ctx.fillStyle = "#000";
+          ctx.font = "14px Arial";
+          ctx.fillText(`J${job.job}`, startX + padding, y + jobHeight / 2 + 5);
         });
+
+        // Draw time labels on the X-axis
+        const totalTime = Math.max(...schedule.map((job) => job.duration)); // Find total time
+        for (let t = 0; t <= totalTime; t++) {
+          const x = t * timeUnitWidth;
+          const y = numCPUs * cpuHeight;
+          ctx.fillStyle = "#000";
+          ctx.fillText(`${t}`, x + padding, y + 20);
+
+          // Draw vertical lines for each time unit
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, y);
+          ctx.strokeStyle = "#000";
+          ctx.stroke();
+        }
       }
     </script>
   </body>
