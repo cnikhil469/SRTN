@@ -316,25 +316,56 @@
         // Clear the canvas before drawing
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const colors = ["#f4a582", "#fdcc8a", "#d73027", "#4575b4"]; // Colors for jobs
+        const colors = [
+          "#f4a582",
+          "#fdcc8a",
+          "#d73027",
+          "#4575b4",
+          "#4a6741",
+          "#cd5c5c",
+          "#c2c5f9",
+          "#4acb22",
+          "#cf1133",
+          "#14375c",
+          "#7fffd4",
+          "#675a99",
+          "#b0cde4",
+          "#2e6298",
+        ];
+
         const cpuHeight = 50; // Height for each CPU row
         const jobHeight = 30; // Height of job bars
-        const padding = 5; // Padding between jobs and edges
+        const padding = 10; // Padding inside the job bars
         const timeUnitWidth = 50; // Width of each time unit on the Gantt chart
+        const labelWidth = 80; // Space for CPU labels on the left side
+        const labelChartSpacing = 20; // Additional space between the label and the chart
+
+        // Calculate total time based on end time of jobs
+        const totalTime =
+          Math.max(
+            ...schedule.map(
+              (job) => job.startTime + (job.duration - job.startTime)
+            )
+          ) + 1; // Add 1 to show the additional vertical line
+
+        // Dynamically adjust canvas width based on total time
+        canvas.width =
+          totalTime * timeUnitWidth + labelWidth + labelChartSpacing;
 
         // Draw CPU labels on the left side
         for (let i = 0; i < numCPUs; i++) {
           const y = i * cpuHeight + padding;
           ctx.fillStyle = "#000";
           ctx.font = "14px Arial";
-          ctx.fillText(`CPU-${i + 1}`, 10, y + jobHeight / 2 + 5);
+          ctx.fillText(`CPU-${i + 1}`, labelWidth / 2, y + jobHeight / 2 + 5);
         }
 
         // Draw the job bars
         schedule.forEach((job, index) => {
           const cpuIndex = job.cpu - 1; // CPU index (0-based)
-          const startX = job.startTime * timeUnitWidth;
-          const width = (job.duration - job.startTime) * timeUnitWidth;
+          const startX =
+            job.startTime * timeUnitWidth + labelWidth + labelChartSpacing; // Added spacing
+          const width = (job.duration - job.startTime) * timeUnitWidth; // Correct job duration width
           const y = cpuIndex * cpuHeight + padding;
 
           // Choose a color for the job
@@ -350,13 +381,14 @@
           ctx.fillText(`J${job.job}`, startX + padding, y + jobHeight / 2 + 5);
         });
 
-        // Draw time labels on the X-axis
-        const totalTime = Math.max(...schedule.map((job) => job.duration)); // Find total time
+        // Draw time labels and vertical lines on the X-axis
         for (let t = 0; t <= totalTime; t++) {
-          const x = t * timeUnitWidth;
+          const x = t * timeUnitWidth + labelWidth + labelChartSpacing; // Offset by label width and spacing
           const y = numCPUs * cpuHeight;
+
+          // Draw the time label (no additional padding for labels)
           ctx.fillStyle = "#000";
-          ctx.fillText(`${t}`, x + padding, y + 20);
+          ctx.fillText(`${t}`, x, y + 20);
 
           // Draw vertical lines for each time unit
           ctx.beginPath();
