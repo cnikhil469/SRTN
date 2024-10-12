@@ -136,6 +136,14 @@
 
         performSRTN(jobs, numCPUs, quantum);
       }
+      function isSameJob(item1, item2) {
+        return (
+          item1.job === item2.job &&
+          item1.startTime === item2.startTime &&
+          item1.duration === item2.duration &&
+          item1.cpu === item2.cpu
+        );
+      }
 
       // Shortest Remaining Time Next (SRTN) Algorithm with Quantum
       function performSRTN(jobs, numCPUs, quantum) {
@@ -182,9 +190,17 @@
           console.log("i", i);
           console.log("j", j);
 
+          // if (currentTime % quantum == 0) {
+          //   i = 0;
+          //   currentTime = currentTime + quantum;
+          //   j = 0;
+          //   console.log("jobs at starting if condition", jobs);
+          //   newJobs = sortJobs(jobs, currentTime);
+          //   console.log("currentTime", currentTime);
+          // }
           if (i == CPU_List.length || j == newJobs.length) {
             i = 0;
-            currentTime = currentTime + 1;
+            currentTime = currentTime + quantum;
             j = 0;
             console.log("jobs at starting if condition", jobs);
             newJobs = sortJobs(jobs, currentTime);
@@ -192,7 +208,7 @@
           }
 
           while (newJobs.length == 0) {
-            currentTime = currentTime + 1;
+            currentTime = currentTime + quantum;
             newJobs = sortJobs(jobs, currentTime);
             console.log("currentTime", currentTime);
           }
@@ -206,7 +222,8 @@
             currentJob.arrivalTime <= currentTime &&
             currentJob.endTime == null &&
             currentJob.currentCpuRunTime <= currentTime &&
-            currentCPU.switchTime <= currentTime
+            currentCPU.switchTime <= currentTime &&
+            currentTime % quantum == 0
           ) {
             currentJob.cpuIds.push(currentCPU.cpuID);
             console.log("the current time inside while", currentTime);
@@ -220,12 +237,25 @@
             currentJob.remainingTime = currentJob.remainingTime - lowerTime;
             currentCPU.switchTime = currentTime + lowerTime;
             currentJob.currentCpuRunTime = currentTime + lowerTime;
-            schedule.push({
-              job: currentJob.job,
-              startTime: currentTime,
-              duration: currentJob.currentCpuRunTime,
-              cpu: i + 1,
-            });
+
+            const jobExists = schedule.some((item) =>
+              isSameJob(item, {
+                job: currentJob.job,
+                startTime: currentTime,
+                duration: currentJob.currentCpuRunTime,
+                cpu: i + 1,
+              })
+            );
+
+            if (!jobExists) {
+              // If the exact item is not present, add it to the schedule
+              schedule.push({
+                job: currentJob.job,
+                startTime: currentTime,
+                duration: currentJob.currentCpuRunTime,
+                cpu: i + 1,
+              });
+            }
           }
           if (
             currentJob &&
@@ -277,88 +307,55 @@
         const listItem = document.createElement("li");
         listItem.textContent = `Job ${job}: Starts at time ${startTime}, finishes at time ${endTime}.`;
         summaryList.appendChild(listItem);
-
       }
-
-      let ganttChart; // Variable to hold the current chart instance
-
       function drawGanttChart(schedule, numCPUs) {
         const ctx = document.getElementById("ganttChart").getContext("2d");
 
-        if (!ctx) {
-          console.error("Failed to get the 2D context of the canvas");
-          return;
-        }
-
-        // Destroy the existing chart if it exists
-        if (ganttChart) {
-          ganttChart.destroy();
-        }
-
-        // Define colors for jobs (you can expand this array as needed)
+        // Prepare datasets for the Gantt Chart
+        const datasets = [];
         const colors = [
-          "#FF5733",
-          "#33FF57",
-          "#3357FF",
-          "#F333FF",
-          "#FF8C33",
-          "#33FFF0",
-          "#8C33FF",
+          "rgba(75, 192, 192, 0.6)",
+          "rgba(255, 99, 132, 0.6)",
+          "rgba(255, 159, 64, 0.6)",
+          "rgba(54, 162, 235, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(255, 206, 86, 0.6)",
         ];
 
-        const datasets = [];
+        // Group data based on CPU
+        for (let cpu = 1; cpu <= numCPUs; cpu++) {
+          const cpuJobs = schedule.filter((entry) => entry.cpu === cpu);
+          const backgroundColor = colors[(cpu - 1) % colors.length];
 
-        // Map each job to a unique color
-        const jobColorMap = {};
-        schedule.forEach((s) => {
-          if (!jobColorMap[s.job]) {
-            jobColorMap[s.job] = colors[s.job % colors.length];
-          }
-        });
-
-        // Prepare datasets for each CPU
-        for (let i = 1; i <= numCPUs; i++) {
-          datasets.push({
-            label: `CPU-${i}`,
-            data: [],
-            backgroundColor: [],
-            borderColor: "black",
-            borderWidth: 1,
+          cpuJobs.forEach((job) => {
+            datasets.push({
+              label: `Job ${job.job} (CPU ${job.cpu})`,
+              backgroundColor,
+              data: [
+                {
+                  x: job.startTime,
+                  x2: job.duration,
+                  y: `CPU ${job.cpu}`,
+                },
+              ],
+            });
           });
         }
 
-        // Fill datasets with job data based on the provided schedule
-        schedule.forEach((s) => {
-          const jobDuration = s.duration;
-          const color = jobColorMap[s.job];
-          datasets[s.cpu - 1].data.push({
-            x: s.startTime, // Start time for job
-            xEnd: s.startTime + jobDuration, // End time for job
-            y: `CPU-${s.cpu}`, // CPU label
-            job: `Job ${s.job}`, // Job label
-            backgroundColor: color, // Color for the job
-          });
-        });
+        // Destroy previous chart instance if exists
+        if (Chart.getChart("ganttChart")) {
+          Chart.getChart("ganttChart").destroy();
+        }
 
-        // Create the Gantt chart
-        ganttChart = new Chart(ctx, {
+        // Create Gantt Chart as a horizontal bar chart
+        new Chart(ctx, {
           type: "bar",
           data: {
-            datasets: datasets.map((dataset) => ({
-              ...dataset,
-              // For each dataset, map its data to match Chart.js 'x' and 'y' axis
-              data: dataset.data.map((d) => ({
-                x: d.x, // Start time
-                x2: d.xEnd, // End time (custom property we'll handle)
-                y: d.y, // CPU
-                job: d.job, // Job label
-                backgroundColor: d.backgroundColor, // Correct background color
-              })),
-            })),
+            labels: Array.from({ length: numCPUs }, (_, i) => `CPU ${i + 1}`),
+            datasets: datasets,
           },
           options: {
-            responsive: true,
-            indexAxis: "y", // Horizontal bars
+            indexAxis: "y",
             scales: {
               x: {
                 type: "linear",
@@ -367,59 +364,27 @@
                   display: true,
                   text: "Time",
                 },
-                stacked: false, // Keep individual jobs separately
               },
               y: {
                 type: "category",
-                labels: Array.from(
-                  { length: numCPUs },
-                  (_, i) => `CPU-${i + 1}`
-                ),
                 title: {
                   display: true,
-                  text: "CPUs",
+                  text: "CPU",
                 },
-                stacked: false, // No stacking of bars
               },
             },
             plugins: {
               tooltip: {
-                enabled: false, // Disable tooltips (can be enabled if needed)
+                callbacks: {
+                  label: function (context) {
+                    const start = context.raw.x;
+                    const end = context.raw.x2;
+                    return `Job ${context.dataset.label}: Start ${start}, End ${end}`;
+                  },
+                },
               },
             },
           },
-          plugins: [
-            {
-              id: "jobLabelPlugin",
-              afterDatasetsDraw: function (chart) {
-                const ctx = chart.ctx;
-                chart.data.datasets.forEach(function (dataset, index) {
-                  const meta = chart.getDatasetMeta(index);
-                  meta.data.forEach(function (bar, idx) {
-                    const job = dataset.data[idx].job;
-                    const startTime = dataset.data[idx].x;
-                    const duration = dataset.data[idx].x2 - startTime;
-                    const jobLabel = `${job} (${startTime} - ${
-                      startTime + duration
-                    })`;
-
-                    // Draw job label inside the bar
-                    ctx.fillStyle = "black";
-                    ctx.font = "12px Arial";
-                    ctx.textAlign = "center";
-                    const barWidth = bar.width;
-                    const barHeight = bar.height;
-
-                    ctx.fillText(
-                      jobLabel,
-                      bar.x + barWidth / 2,
-                      bar.y + barHeight / 2 + 4
-                    );
-                  });
-                });
-              },
-            },
-          ],
         });
       }
     </script>
