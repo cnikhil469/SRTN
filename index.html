@@ -299,7 +299,7 @@
         listItem.textContent = `Job ${job}: Starts at time ${startTime}, finishes at time ${endTime}.`;
         summaryList.appendChild(listItem);
       }
-
+      // drawgantt chart
       function drawGanttChart(schedule, numCPUs, quantum) {
         const canvas = document.getElementById("ganttChart");
         const ctx = canvas.getContext("2d");
@@ -307,6 +307,7 @@
         // Clear the canvas before drawing
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        // Fixed set of colors to assign to jobs, using job ID for consistency
         const colors = [
           "#f4a582",
           "#fdcc8a",
@@ -324,26 +325,36 @@
           "#2e6298",
         ];
 
+        // Function to assign a color based on the job ID
+        function getJobColor(jobID) {
+          return colors[jobID % colors.length];
+        }
+
         const cpuHeight = 50; // Height for each CPU row
         const jobHeight = 30; // Height of job bars
         const padding = 10; // Padding inside the job bars
-        const timeUnitWidth = 50; // Width of each time unit on the Gantt chart
         const labelWidth = 80; // Space for CPU labels on the left side
         const labelChartSpacing = 20; // Additional space between the label and the chart
 
-        // Calculate total time based on end time of jobs
+        // Calculate total time based on the end time of jobs
         const totalTime =
           Math.max(
             ...schedule.map(
               (job) => job.startTime + (job.duration - job.startTime)
             )
-          ) + 1;
+          ) + 1; // Add 1 to show the additional vertical line
 
-        // Dynamically adjust canvas width based on total time
+        // Set minimum and maximum limits for time unit width
+        const maxCanvasWidth = 1000; // Maximum canvas width
+        const minTimeUnitWidth = 20; // Minimum width for each time unit
+        const timeUnitWidth = Math.max(
+          Math.min(maxCanvasWidth / totalTime, 50),
+          minTimeUnitWidth
+        ); // Adjust width dynamically, but not below 20px
+
+        // Adjust the canvas width based on total time and timeUnitWidth
         canvas.width =
-          (Math.ceil(totalTime / quantum) + 1) * timeUnitWidth +
-          labelWidth +
-          labelChartSpacing;
+          totalTime * timeUnitWidth + labelWidth + labelChartSpacing;
 
         // Draw CPU labels on the left side
         for (let i = 0; i < numCPUs; i++) {
@@ -354,18 +365,15 @@
         }
 
         // Draw the job bars
-        schedule.forEach((job, index) => {
+        schedule.forEach((job) => {
           const cpuIndex = job.cpu - 1; // CPU index (0-based)
           const startX =
-            (job.startTime * timeUnitWidth) / quantum +
-            labelWidth +
-            labelChartSpacing; // Adjusted by quantum
-          const width =
-            ((job.duration - job.startTime) * timeUnitWidth) / quantum; // Adjust width by quantum
+            job.startTime * timeUnitWidth + labelWidth + labelChartSpacing;
+          const width = (job.duration - job.startTime) * timeUnitWidth; // Correct job duration width
           const y = cpuIndex * cpuHeight + padding;
 
-          // Choose a color for the job
-          const color = colors[index % colors.length];
+          // Assign a consistent color to the job based on job ID
+          const color = getJobColor(job.job);
 
           // Draw the job as a rectangle
           ctx.fillStyle = color;
@@ -377,22 +385,30 @@
           ctx.fillText(`J${job.job}`, startX + padding, y + jobHeight / 2 + 5);
         });
 
-        // Draw time labels and vertical lines on the X-axis
-        for (let t = 0; t <= totalTime; t += quantum) {
-          const x =
-            (t * timeUnitWidth) / quantum + labelWidth + labelChartSpacing; // Adjust by quantum
+        // Draw time labels and vertical lines on the X-axis based on quantum
+        let intervalCount = 3;
+        let intervalStep = quantum / intervalCount; // Calculate interval step for the X-axis
+
+        // Collect exact end times for jobs that do not align with the intervals
+        const jobEndTimes = [...new Set(schedule.map((job) => job.duration))];
+
+        for (let t = 0; t <= totalTime; t++) {
+          const x = t * timeUnitWidth + labelWidth + labelChartSpacing;
           const y = numCPUs * cpuHeight;
 
-          // Draw the time label
-          ctx.fillStyle = "#000";
-          ctx.fillText(`${t}`, x, y + 20);
+          // Check if the time is a quantum-based interval or an exact job end time
+          if (t % intervalStep === 0 || jobEndTimes.includes(t)) {
+            // Draw the time label (no additional padding for labels)
+            ctx.fillStyle = "#000";
+            ctx.fillText(`${t}`, x, y + 20);
 
-          // Draw vertical lines for each quantum time unit
-          ctx.beginPath();
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, y);
-          ctx.strokeStyle = "#000";
-          ctx.stroke();
+            // Draw vertical lines for each time unit
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, y);
+            ctx.strokeStyle = "#000";
+            ctx.stroke();
+          }
         }
       }
     </script>
