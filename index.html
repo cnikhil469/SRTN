@@ -70,7 +70,7 @@
 
     <h3>Total Turnaround Time: <span id="totalTurnaround">0</span></h3>
 
-    <canvas id="ganttChart" width="800" height="400"></canvas>
+    <canvas id="ganttChart" width="1800" height="1000"></canvas>
 
     <div id="summary">
       <h3>Final Summary of Start Times</h3>
@@ -235,6 +235,7 @@
                 startTime: currentTime,
                 duration: currentJob.currentCpuRunTime,
                 cpu: i + 1,
+                arrivalTime: currentJob.arrivalTime,
               })
             );
 
@@ -245,6 +246,7 @@
                 startTime: currentTime,
                 duration: currentJob.currentCpuRunTime,
                 cpu: i + 1,
+                arrivalTime: currentJob.arrivalTime,
               });
             }
           }
@@ -301,11 +303,10 @@
       }
       // drawgantt chart
       function drawGanttChart(schedule, numCPUs, quantum) {
+        console.log("schedule", schedule);
+
         const canvas = document.getElementById("ganttChart");
         const ctx = canvas.getContext("2d");
-
-        // Clear the canvas before drawing
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         // Fixed set of colors to assign to jobs, using job ID for consistency
         const colors = [
@@ -325,7 +326,6 @@
           "#2e6298",
         ];
 
-        // Function to assign a color based on the job ID
         function getJobColor(jobID) {
           return colors[jobID % colors.length];
         }
@@ -335,6 +335,7 @@
         const padding = 10; // Padding inside the job bars
         const labelWidth = 80; // Space for CPU labels on the left side
         const labelChartSpacing = 20; // Additional space between the label and the chart
+        const jobArrivalSpace = 100; // Extra space above CPU1 for job arrivals
 
         // Calculate total time based on the end time of jobs
         const totalTime =
@@ -342,7 +343,7 @@
             ...schedule.map(
               (job) => job.startTime + (job.duration - job.startTime)
             )
-          ) + 1; // Add 1 to show the additional vertical line
+          ) + 1;
 
         // Set minimum and maximum limits for time unit width
         const maxCanvasWidth = 1000; // Maximum canvas width
@@ -350,15 +351,18 @@
         const timeUnitWidth = Math.max(
           Math.min(maxCanvasWidth / totalTime, 50),
           minTimeUnitWidth
-        ); // Adjust width dynamically, but not below 20px
+        );
 
         // Adjust the canvas width based on total time and timeUnitWidth
         canvas.width =
           totalTime * timeUnitWidth + labelWidth + labelChartSpacing;
 
+        // Increase canvas height to fit job arrivals above CPU1
+        canvas.height = numCPUs * cpuHeight + padding * 2 + jobArrivalSpace;
+
         // Draw CPU labels on the left side
         for (let i = 0; i < numCPUs; i++) {
-          const y = i * cpuHeight + padding;
+          const y = i * cpuHeight + padding + jobArrivalSpace;
           ctx.fillStyle = "#000";
           ctx.font = "14px Arial";
           ctx.fillText(`CPU-${i + 1}`, labelWidth / 2, y + jobHeight / 2 + 5);
@@ -370,9 +374,8 @@
           const startX =
             job.startTime * timeUnitWidth + labelWidth + labelChartSpacing;
           const width = (job.duration - job.startTime) * timeUnitWidth; // Correct job duration width
-          const y = cpuIndex * cpuHeight + padding;
+          const y = cpuIndex * cpuHeight + padding + jobArrivalSpace;
 
-          // Assign a consistent color to the job based on job ID
           const color = getJobColor(job.job);
 
           // Draw the job as a rectangle
@@ -385,29 +388,74 @@
           ctx.fillText(`J${job.job}`, startX + padding, y + jobHeight / 2 + 5);
         });
 
-        // Draw time labels and vertical lines on the X-axis based on quantum
+        // Draw time labels and vertical lines on the X-axis based on quantum and job arrivals
         let intervalCount = 3;
-        let intervalStep = quantum / intervalCount; // Calculate interval step for the X-axis
+        let intervalStep = quantum / intervalCount;
 
-        // Collect exact end times for jobs that do not align with the intervals
+        const uniqueArrivalTimes = new Set(
+          schedule.map((job) => job.arrivalTime)
+        );
         const jobEndTimes = [...new Set(schedule.map((job) => job.duration))];
+
+        const arrowY = 10; // Y position for arrow (Above CPU1)
+        const labelYSpacing = 30; // Spacing between labels
 
         for (let t = 0; t <= totalTime; t++) {
           const x = t * timeUnitWidth + labelWidth + labelChartSpacing;
-          const y = numCPUs * cpuHeight;
+          const y = numCPUs * cpuHeight + jobArrivalSpace;
 
-          // Check if the time is a quantum-based interval or an exact job end time
-          if (t % intervalStep === 0 || jobEndTimes.includes(t)) {
-            // Draw the time label (no additional padding for labels)
+          if (
+            t % intervalStep === 0 ||
+            jobEndTimes.includes(t) ||
+            uniqueArrivalTimes.has(t)
+          ) {
             ctx.fillStyle = "#000";
             ctx.fillText(`${t}`, x, y + 20);
 
-            // Draw vertical lines for each time unit
             ctx.beginPath();
-            ctx.moveTo(x, 0);
+            ctx.moveTo(x, jobArrivalSpace); // Start line after job arrivals
             ctx.lineTo(x, y);
             ctx.strokeStyle = "#000";
             ctx.stroke();
+          }
+
+          const jobsArrivingAtT = schedule.filter(
+            (job) =>
+              uniqueArrivalTimes.has(job.arrivalTime) && job.arrivalTime === t
+          );
+
+          if (jobsArrivingAtT.length > 0) {
+            // Group jobs by their arrival time and job ID to prevent duplicates
+            const groupedJobs = jobsArrivingAtT.reduce((acc, job) => {
+              const key = `${job.arrivalTime}-${job.job}`;
+              if (!acc[key]) {
+                acc[key] = job;
+              }
+              return acc;
+            }, {});
+            let spaceVertical = 0;
+            // Draw a single downward arrow for each group
+            for (const key in groupedJobs) {
+              const job = groupedJobs[key];
+
+              ctx.beginPath();
+              ctx.moveTo(x, arrowY); // Arrow start point
+              ctx.lineTo(x - 5, arrowY - 10); // Left diagonal (up)
+              ctx.lineTo(x + 5, arrowY - 10); // Right diagonal (up)
+              ctx.closePath();
+              ctx.fillStyle = "#000";
+              ctx.fill();
+
+              // Draw job label vertically beside the arrow
+              ctx.fillStyle = "#000";
+              ctx.font = "12px Arial";
+              ctx.fillText(
+                `J${job.job}`,
+                x - 6,
+                arrowY + labelYSpacing + spaceVertical
+              );
+              spaceVertical = spaceVertical + 20;
+            }
           }
         }
       }
